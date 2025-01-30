@@ -31,8 +31,7 @@ pub fn sub() -> impl Stream<Item = ClipboardMessage> {
         async move {
             match paste_watch::Watcher::init(paste_watch::ClipboardType::Regular) {
                 Ok(mut clipboard_watcher) => {
-                    let (tx, mut rx) =
-                        mpsc::channel::<Option<std::vec::IntoIter<(pipe::Receiver, String)>>>(5);
+                    let (tx, mut rx) = mpsc::channel(5);
 
                     tokio::task::spawn_blocking(move || loop {
                         match clipboard_watcher.start_watching(paste_watch::Seat::Unspecified) {
@@ -58,13 +57,13 @@ pub fn sub() -> impl Stream<Item = ClipboardMessage> {
                     loop {
                         match rx.recv().await {
                             Some(Some(res)) => {
-                                let mut data = MimeDataMap::with_capacity(res.len());
+                                let mut data = MimeDataMap::new();
 
-                                for (mut pipe, mime_type) in res {
+                                for (mime_type, mut pipe) in res {
                                     let mut contents = Vec::new();
 
                                     match tokio::time::timeout(
-                                        Duration::from_millis(100),
+                                        Duration::from_millis(1000),
                                         pipe.read_to_end(&mut contents),
                                     )
                                     .await
@@ -74,7 +73,7 @@ pub fn sub() -> impl Stream<Item = ClipboardMessage> {
                                         }
                                         Ok(Err(e)) => {
                                             warn!(
-                                                "read timeout on external pipe clipboard: {} {e}",
+                                                "read error on external pipe clipboard: {} {e}",
                                                 mime_type
                                             );
                                         }
@@ -85,10 +84,13 @@ pub fn sub() -> impl Stream<Item = ClipboardMessage> {
                                             );
                                         }
                                     }
+                                    drop(pipe);
                                 }
 
                                 if !data.is_empty() {
                                     output.send(ClipboardMessage::Data(data)).await.unwrap();
+                                } else {
+                                    warn!("nothing to send from clipboard sub");
                                 }
                             }
 

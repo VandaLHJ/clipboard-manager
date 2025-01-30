@@ -67,8 +67,8 @@ lto = "fat"
 # branch = "fix_qr_code_theme"
 # path = "../libcosmic"
 
-# [patch."https://github.com/wiiznokes/wl-clipboard-rs.git".wl-clipboard-rs]
-# path = "../wl-clipboard-rs"
+[patch."https://github.com/wiiznokes/wl-clipboard-rs.git".wl-clipboard-rs]
+path = "../wl-clipboard-rs"
 
 
 [patch."https://github.com/smithay/client-toolkit.git"]
