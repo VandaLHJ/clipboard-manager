@@ -4,7 +4,7 @@ use std::{
 };
 
 use cosmic::iced::{futures::SinkExt, stream::channel};
-use futures::{future::join_all, Stream};
+use futures::Stream;
 use tokio::{io::AsyncReadExt, net::unix::pipe, sync::mpsc};
 use wl_clipboard_rs::{
     copy::{self, MimeSource},
@@ -58,37 +58,34 @@ pub fn sub() -> impl Stream<Item = ClipboardMessage> {
                     loop {
                         match rx.recv().await {
                             Some(Some(res)) => {
-                                let data: MimeDataMap =
-                                    join_all(res.map(|(mut pipe, mime_type)| async move {
-                                        let mut contents = Vec::new();
+                                let mut data = MimeDataMap::with_capacity(res.len());
 
-                                        match tokio::time::timeout(
-                                            Duration::from_millis(100),
-                                            pipe.read_to_end(&mut contents),
-                                        )
-                                        .await
-                                        {
-                                            Ok(Ok(_)) => Some((mime_type, contents)),
-                                            Ok(Err(e)) => {
-                                                warn!(
-                                                "read timeout on external pipe clipboard: {} {e}",
-                                                mime_type
-                                            );
-                                                None
-                                            }
-                                            Err(e) => {
-                                                warn!(
-                                                "read timeout on external pipe clipboard: {} {e}",
-                                                mime_type
-                                            );
-                                                None
-                                            }
-                                        }
-                                    }))
+                                for (mut pipe, mime_type) in res {
+                                    let mut contents = Vec::new();
+
+                                    match tokio::time::timeout(
+                                        Duration::from_millis(100),
+                                        pipe.read_to_end(&mut contents),
+                                    )
                                     .await
-                                    .into_iter()
-                                    .flatten()
-                                    .collect();
+                                    {
+                                        Ok(Ok(_)) => {
+                                            data.insert(mime_type, contents);
+                                        }
+                                        Ok(Err(e)) => {
+                                            warn!(
+                                                "read timeout on external pipe clipboard: {} {e}",
+                                                mime_type
+                                            );
+                                        }
+                                        Err(e) => {
+                                            warn!(
+                                                "read timeout on external pipe clipboard: {} {e}",
+                                                mime_type
+                                            );
+                                        }
+                                    }
+                                }
 
                                 if !data.is_empty() {
                                     output.send(ClipboardMessage::Data(data)).await.unwrap();
